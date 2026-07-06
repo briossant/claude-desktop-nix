@@ -1,0 +1,63 @@
+name: Update claude-desktop
+
+on:
+  schedule:
+    - cron: "23 */6 * * *" # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Update package metadata (GPG-verified)
+        run: ./scripts/update.sh
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if git diff --quiet -- flake.nix; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="$(sed -n 's/.*version = "\([^"]*\)"; # claude-desktop-version.*/\1/p' flake.nix)"
+          if [ -z "$version" ]; then
+            echo "Could not parse claude-desktop version from flake.nix" >&2
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate updated package
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          nix build .#claude-desktop --print-build-logs
+          nix flake check --no-build
+
+      - name: Open PR
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: update claude-desktop to ${{ steps.changes.outputs.version }}"
+          title: "chore: update claude-desktop to ${{ steps.changes.outputs.version }}"
+          body: |
+            Automated version bump from Anthropic's apt repository.
+
+            The deb hashes were copied from apt metadata whose GPG signature
+            was verified against the pinned Anthropic key
+            (`31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE`), and the
+            package was built successfully in CI before this PR was opened.
+
+            Expected diff: `version` + two `hash` lines in `flake.nix`, nothing else.
+          branch: "auto-update/claude-desktop-${{ steps.changes.outputs.version }}"
+          delete-branch: true
