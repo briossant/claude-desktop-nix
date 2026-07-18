@@ -46,6 +46,7 @@ jobs:
 
       - name: Open PR
         if: steps.changes.outputs.changed == 'true'
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "chore: update claude-desktop to ${{ steps.changes.outputs.version }}"
@@ -56,8 +57,19 @@ jobs:
             The deb hashes were copied from apt metadata whose GPG signature
             was verified against the pinned Anthropic key
             (`31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE`), and the
-            package was built successfully in CI before this PR was opened.
+            package was built successfully in CI before this PR was opened,
+            so it is auto-merged as soon as it's created.
 
             Expected diff: `version` + two `hash` lines in `flake.nix`, nothing else.
           branch: "auto-update/claude-desktop-${{ steps.changes.outputs.version }}"
           delete-branch: true
+
+      # PRs opened with the default GITHUB_TOKEN don't trigger the pull_request-
+      # triggered CI workflow (GitHub's anti-recursion rule), so there's nothing
+      # to wait on here — the build was already validated above. Merge straight
+      # away instead of leaving it to rot until someone clicks the button by hand.
+      - name: Auto-merge PR
+        if: steps.changes.outputs.changed == 'true' && steps.cpr.outputs.pull-request-number
+        run: gh pr merge --merge --delete-branch "${{ steps.cpr.outputs.pull-request-number }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
