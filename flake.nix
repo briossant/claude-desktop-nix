@@ -24,15 +24,15 @@
           #  verifying its GPG signature (see the update script).           #
           #  Do not edit the marker comments: the updater targets them.     #
           # -------------------------------------------------------------- #
-          version = "1.18286.0"; # claude-desktop-version
+          version = "1.22209.0"; # claude-desktop-version
           debSrcs = {
             x86_64-linux = {
               debArch = "amd64";
-              hash = "sha256-jzFK0agKq1JxGo6qvAaq5I+zQfCt6koNcmTbXKudBTY="; # deb-hash-amd64
+              hash = "sha256-bRiueSwr3a0B7cl8LD9M9IkATO/o/tZ2Cmlu0lxJv2E="; # deb-hash-amd64
             };
             aarch64-linux = {
               debArch = "arm64";
-              hash = "sha256-SCC5iankMzlWtsvq7icy3StJkE+6VAtHKWPIADyAhsc="; # deb-hash-arm64
+              hash = "sha256-cyP+bDq2tweOgam/AgCAbjSG5zvFhzQg7p0m8Qtm4ek="; # deb-hash-arm64
             };
           };
           debSrc = debSrcs.${system};
@@ -140,19 +140,29 @@
               cp -a usr/lib/claude-desktop "$out/lib/"
               cp -a usr/share/applications usr/share/icons usr/share/doc "$out/share/"
 
-              substituteInPlace "$out/share/applications/claude-desktop.desktop" \
+              substituteInPlace "$out"/share/applications/*.desktop \
                 --replace-fail "Exec=claude-desktop" "Exec=$out/bin/claude-desktop"
 
               asarRoot="$(mktemp -d)"
               asar extract "$out/lib/claude-desktop/resources/app.asar" "$asarRoot"
+
+              # The firmware/virtiofsd path table lives in a content-hashed
+              # chunk file, not always .vite/build/index.js, so locate it by
+              # content instead of by a fixed name.
+              firmwarePatchTarget="$(grep -rlF 'AAVMF_CODE' "$asarRoot/.vite/build")"
+              if [ "$(printf '%s\n' "$firmwarePatchTarget" | wc -l)" != 1 ]; then
+                echo "expected exactly one file containing AAVMF_CODE, got:" >&2
+                printf '%s\n' "$firmwarePatchTarget" >&2
+                exit 1
+              fi
 
               FIRMWARE_CODE_PATH="${firmwareCodePath}" \
               VIRTIOFSD_PATH="$out/lib/claude-desktop/resources/virtiofsd" \
               perl -0pi -e '
                 s{([A-Za-z0-9_\$]+)=process\.arch==="arm64"\?\["/usr/share/AAVMF/AAVMF_CODE\.fd"\]:\["/usr/share/OVMF/OVMF_CODE_4M\.fd","/usr/share/OVMF/OVMF_CODE\.fd"\]}{$1=["$ENV{FIRMWARE_CODE_PATH}"]} or die "failed to patch firmware path\n";
                 s{([A-Za-z0-9_\$]+)=\["/usr/libexec/virtiofsd","/usr/bin/virtiofsd"\]}{$1=["$ENV{VIRTIOFSD_PATH}"]} or die "failed to patch virtiofsd path\n";
-                s{return A\.replace\("OVMF_CODE","OVMF_VARS"\)\.replace\("AAVMF_CODE","AAVMF_VARS"\)}{return A.replace("OVMF_CODE","OVMF_VARS").replace("AAVMF_CODE","AAVMF_VARS").replace("edk2-aarch64-code.fd","edk2-arm-vars.fd")} or die "failed to patch firmware vars path\n";
-              ' "$asarRoot/.vite/build/index.js"
+                s{return ([A-Za-z0-9_\$]+)\.replace\("OVMF_CODE","OVMF_VARS"\)\.replace\("AAVMF_CODE","AAVMF_VARS"\)}{return $1.replace("OVMF_CODE","OVMF_VARS").replace("AAVMF_CODE","AAVMF_VARS").replace("edk2-aarch64-code.fd","edk2-arm-vars.fd")} or die "failed to patch firmware vars path\n";
+              ' "$firmwarePatchTarget"
 
               rm "$out/lib/claude-desktop/resources/app.asar"
               asar pack --unpack "*.node" "$asarRoot" "$out/lib/claude-desktop/resources/app.asar"
