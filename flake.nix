@@ -24,15 +24,15 @@
           #  verifying its GPG signature (see the update script).           #
           #  Do not edit the marker comments: the updater targets them.     #
           # -------------------------------------------------------------- #
-          version = "1.46388.2"; # claude-desktop-version
+          version = "1.49585.0"; # claude-desktop-version
           debSrcs = {
             x86_64-linux = {
               debArch = "amd64";
-              hash = "sha256-mL9U6F5JFgaMQoFFmw8EMdj/aANHc/PumDEdcgZWarE="; # deb-hash-amd64
+              hash = "sha256-4LTOYxOUOmnpvWF0mik7/KJBtN+zf4jfZBG0tp7GekA="; # deb-hash-amd64
             };
             aarch64-linux = {
               debArch = "arm64";
-              hash = "sha256-uUSiFUUogVu0dr+x5wkfij4ymzxn9sEd6NQWaKYDvZ4="; # deb-hash-arm64
+              hash = "sha256-ijrj4AfDaiE6FrG1OU46DINrrwz4ighJHoIClSricCA="; # deb-hash-arm64
             };
           };
           debSrc = debSrcs.${system};
